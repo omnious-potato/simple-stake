@@ -3,11 +3,13 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "@chainlink/contracts/src/v0.8/VRFConsumerBase.sol";
 
 contract StakeToken is ERC1155, ERC1155Holder, VRFConsumerBase, Ownable {
     address public recentWinner;
+    address public tokensHolder;
     uint256 public constant BRONZE = 0;
     uint256 public constant SILVER = 1;
     uint256 public constant GOLD = 2;
@@ -15,6 +17,7 @@ contract StakeToken is ERC1155, ERC1155Holder, VRFConsumerBase, Ownable {
 
     bytes32 public keyhash;
     uint256 public fee;
+    address public link;
 
     uint256[] public INITIAL_MINT_IDS = [BRONZE, SILVER, GOLD];
 
@@ -41,6 +44,7 @@ contract StakeToken is ERC1155, ERC1155Holder, VRFConsumerBase, Ownable {
     ) ERC1155("") VRFConsumerBase(_vrfCoordinator, _link) {
         fee = _fee;
         keyhash = _keyhash;
+        link = _link;
 
         timed_stake_status = STAKE_STATUS.CLOSED;
 
@@ -53,8 +57,8 @@ contract StakeToken is ERC1155, ERC1155Holder, VRFConsumerBase, Ownable {
         _supply[1] = _silver;
         _supply[2] = _gold;
 
-        _mintBatch(address(this), INITIAL_MINT_IDS, _supply, "0x0");
-        _mintBatch(owner(), INITIAL_MINT_IDS, _supply, "0x0"); //remove later
+        //_mintBatch(address(this), INITIAL_MINT_IDS, _supply, "0x0");
+        _mintBatch(owner(), INITIAL_MINT_IDS, _supply, "0x0");
     }
 
     STAKE_STATUS public timed_stake_status;
@@ -89,7 +93,7 @@ contract StakeToken is ERC1155, ERC1155Holder, VRFConsumerBase, Ownable {
 
         require(block.timestamp <= timed_stake_end, "Stake is alredy due!");
 
-        safeTransferFrom(msg.sender, address(this), token_id, amount, "0x0");
+        safeTransferFrom(msg.sender, owner(), token_id, amount, "0x0");
         timed_withheld_tokens[token_id] += amount;
         ticketsByAddress[msg.sender] = amount * tokenBaseValue[token_id];
         addressByIndex[timedIndexIncrement] = msg.sender;
@@ -127,7 +131,7 @@ contract StakeToken is ERC1155, ERC1155Holder, VRFConsumerBase, Ownable {
         recentWinner = addressByIndex[i];
 
         safeBatchTransferFrom(
-            address(this),
+            owner(),
             recentWinner,
             timed_stake_accepts,
             timed_withheld_tokens,
@@ -142,6 +146,7 @@ contract StakeToken is ERC1155, ERC1155Holder, VRFConsumerBase, Ownable {
         totalTickets = 0;
         timedIndexIncrement = 0;
         timed_withheld_tokens = [0, 0, 0];
+        timedRequestId = 0;
 
         timed_stake_status = STAKE_STATUS.CLOSED;
     }
@@ -168,4 +173,37 @@ contract StakeToken is ERC1155, ERC1155Holder, VRFConsumerBase, Ownable {
     {
         return super.supportsInterface(interfaceId);
     }
+
+    event LinkTransferReceived(address _from, uint256 _amount);
+    event LinkTransferSent(address _from, address _to, uint256 _amount);
+
+    function withdrawLINK(
+        IERC20 token,
+        address to,
+        uint256 amount
+    ) public onlyOwner {
+        require(address(token) == link, "Can only withdraw LINK!");
+        uint256 linkBalance = token.balanceOf(address(this));
+        require(amount <= linkBalance, "Insufficient balance!");
+        token.transfer(to, amount);
+        emit LinkTransferSent(msg.sender, to, amount);
+    }
+
+    function getTokens(uint256 token_id) public payable {
+        require(
+            token_id < INITIAL_MINT_IDS.length,
+            "Token you requested is not exchangeable that way!"
+        );
+    }
+    // function returnTokens(uint256 token_id, uint256 _amount) public {
+    //     require(
+    //         balanceOf(msg.sender, token_id) >= _amount,
+    //         "Insufficient tokens!"
+    //     );
+    // }
+
+    // function withdrawETH(address _to, uint256 _amount) public {
+    //     require(address(this).balance >= _amount);
+    //     payable(_to).transfer(_amount);
+    //}
 }

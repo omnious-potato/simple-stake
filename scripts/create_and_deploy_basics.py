@@ -2,8 +2,6 @@
 Script to deploy contract and use the basic function of it and basic ERC1155 operations
 """
 import time
-
-from toolz.itertoolz import get
 from scripts.functions import (
     LOCAL_BLOCKCHAIN_ENVIRONMENTS,
     fund_with_link,
@@ -47,7 +45,8 @@ def create_and_mint(_bronze, _silver, _gold):
 def transfer_from_contract(to, token_id, amount):
     contract = StakeToken[-1]
     caddr = contract.address
-    tx = contract.safeTransferFrom(caddr, to, token_id, amount, "0x0", {"from": caddr})
+    owner = contract.owner()
+    tx = contract.safeTransferFrom(owner, to, token_id, amount, "0x0", {"from": owner})
     tx.wait(1)
     return tx
 
@@ -85,13 +84,13 @@ def timed_stake():
     tx_end = contract.end_timed_stake({"from": owner})
 
 
+def fund_test():
+    contract = StakeToken[-1]
+    contract.fundLINK(1 * 10 ** 18, {"from": get_account()})
+
+
 def main():
     """
     Launches all functions implemented above
     """
-
     contract = create_and_mint(MINT_BRONZE, MINT_SILVER, MINT_GOLD)
-    user_1 = get_account(1)
-    user_2 = get_account(2)
-    transfer_from_contract(get_account(1), 0, 1000)
-    transfer_from_contract(get_account(2), 0, 1000)
